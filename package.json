@@ -1,0 +1,22 @@
+{
+  "name": "project-antigravity",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Talent & Innovation Academy (TIA Phase 1 - Ghana JHS MVP)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:generate": "npm --workspace=@antigravity/database run generate",
+    "db:migrate": "npm --workspace=@antigravity/database run migrate",
+    "db:deploy": "npm --workspace=@antigravity/database run deploy",
+    "db:test": "npm --workspace=@antigravity/database test",
+    "build": "npm run --workspaces --if-present build",
+    "test": "npm run --workspaces --if-present test",
+    "lint": "npm run --workspaces --if-present lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

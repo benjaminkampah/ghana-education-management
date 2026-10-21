@@ -1,0 +1,195 @@
+// ==============================================================================
+// Project Antigravity (TIA Phase 1.0 - Ghana JHS MVP)
+// Prisma Schema Definition with PostgreSQL & pgvector Support
+// ==============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto, vector]
+}
+
+enum UserRole {
+  LEARNER
+  GUARDIAN
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum EducationStage {
+  JHS_1
+  JHS_2
+  JHS_3
+  COMPLETED_JHS
+
+  @@map("education_stage")
+}
+
+enum ConsentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+
+  @@map("consent_status")
+}
+
+enum InstitutionType {
+  SHS
+  TVET
+  STEM_ACADEMY
+  TERTIARY_PARTNER
+
+  @@map("institution_type")
+}
+
+enum InstitutionGender {
+  MIXED
+  BOYS
+  GIRLS
+
+  @@map("institution_gender")
+}
+
+enum InstitutionResidence {
+  DAY
+  BOARDING
+  DAY_AND_BOARDING
+
+  @@map("institution_residence")
+}
+
+enum OpportunityType {
+  SCHOLARSHIP
+  SHS_PLACEMENT
+  TVET_TRACK
+  STEM_GRANT
+  MENTORSHIP
+
+  @@map("opportunity_type")
+}
+
+enum OpportunityStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  ARCHIVED
+
+  @@map("opportunity_status")
+}
+
+model User {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String           @unique @db.VarChar(255)
+  passwordHash         String           @map("password_hash") @db.VarChar(255)
+  role                 UserRole         @default(LEARNER)
+  isActive             Boolean          @default(true) @map("is_active")
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  learnerProfile       LearnerProfile?
+  guardianships        Guardianship[]   @relation("GuardianRelation")
+  verifiedInstitutions Institution[]    @relation("AdminVerifiedInstitutions")
+
+  @@map("users")
+}
+
+model LearnerProfile {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String         @unique @map("user_id") @db.Uuid
+  educationStage EducationStage @map("education_stage")
+  academicData   Json           @default("{}") @map("academic_data")
+  encryptedPii   String         @map("encrypted_pii") @db.Text
+  currentSchool  String?        @map("current_school") @db.VarChar(255)
+  region         String?        @db.VarChar(100)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guardianships  Guardianship[]
+
+  @@map("learner_profiles")
+}
+
+model Guardianship {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  learnerId        String         @map("learner_id") @db.Uuid
+  guardianId       String         @map("guardian_id") @db.Uuid
+  relationshipType String         @map("relationship_type") @db.VarChar(50)
+  consentStatus    ConsentStatus  @default(PENDING) @map("consent_status")
+  consentTimestamp DateTime?      @map("consent_timestamp") @db.Timestamptz(6)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  learner          LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  guardian         User           @relation("GuardianRelation", fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@unique([learnerId, guardianId], name: "uq_guardianship_learner_guardian")
+  @@map("guardianships")
+}
+
+model Institution {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String               @db.VarChar(255)
+  csspsCode      String               @unique @map("cssps_code") @db.VarChar(50)
+  institutionType InstitutionType     @default(SHS) @map("institution_type")
+  category       String?              @db.VarChar(10)
+  genderType     InstitutionGender    @default(MIXED) @map("gender_type")
+  residenceType  InstitutionResidence @default(DAY_AND_BOARDING) @map("residence_type")
+  region         String               @db.VarChar(100)
+  district       String?              @db.VarChar(150)
+  isVerified     Boolean              @default(false) @map("is_verified")
+  verifiedBy     String?              @map("verified_by") @db.Uuid
+  verifiedAt     DateTime?            @map("verified_at") @db.Timestamptz(6)
+  website        String?              @db.VarChar(255)
+  contactEmail   String?              @map("contact_email") @db.VarChar(255)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  verifier       User?                @relation("AdminVerifiedInstitutions", fields: [verifiedBy], references: [id], onDelete: SetNull)
+  opportunities  Opportunity[]
+
+  @@map("institutions")
+}
+
+model Opportunity {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title               String            @db.VarChar(255)
+  description         String            @db.Text
+  institutionId       String?           @map("institution_id") @db.Uuid
+  type                OpportunityType
+  rulesJsonb          Json              @default("{}") @map("rules_jsonb")
+  benefits            Json?             @default("[]")
+  applicationDeadline DateTime?         @map("application_deadline") @db.Timestamptz(6)
+  expiryDate          DateTime          @map("expiry_date") @db.Timestamptz(6)
+  status              OpportunityStatus @default(ACTIVE)
+  slotsAvailable      Int?              @map("slots_available")
+  sourceUrl           String?           @map("source_url") @db.VarChar(500)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  institution         Institution?      @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+
+  @@map("opportunities")
+}
+
+model VectorDocument {
+  id           String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title        String?                      @db.VarChar(255)
+  content      String                       @db.Text
+  embedding    Unsupported("vector(1536)")
+  sourceUrl    String                       @map("source_url") @db.VarChar(500)
+  documentType String?                      @map("document_type") @db.VarChar(100)
+  chunkIndex   Int                          @default(0) @map("chunk_index")
+  metadata     Json                         @default("{}")
+  createdAt    DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("vector_documents")
+}
